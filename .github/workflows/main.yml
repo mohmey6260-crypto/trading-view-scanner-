@@ -12,6 +12,7 @@ jobs:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -20,6 +21,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Extract project ZIP
         run: |
@@ -30,33 +36,36 @@ jobs:
             exit 1
           fi
 
-          mkdir project
+          mkdir -p project
+
           unzip -q "$ZIP" -d project
 
-          echo "Searching for Gradle project..."
-          find project -name gradlew -type f
+          echo "Project extracted successfully."
+
+          echo "Project files:"
+          find project -maxdepth 3 -type f
 
       - name: Build APK
         run: |
-          GRADLEW=$(find project -name gradlew -type f | head -n 1)
+          PROJECT_DIR="project/TradingViewScanner"
 
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: gradlew was not found"
-            echo "Project files:"
-            find project -maxdepth 4 -type f
+          if [ ! -f "$PROJECT_DIR/settings.gradle" ]; then
+            echo "ERROR: settings.gradle was not found"
+            echo "Searching for settings.gradle..."
+            find project -name settings.gradle -type f
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$GRADLEW")
+          echo "Building project from:"
+          echo "$PROJECT_DIR"
 
           cd "$PROJECT_DIR"
 
-          chmod +x gradlew
-
-          ./gradlew assembleDebug
+          gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: TradingViewScanner-APK
-          path: project/**/build/outputs/apk/**/*.apk
+          path: project/TradingViewScanner/**/build/outputs/apk/**/*.apk
+          if-no-files-found: error
