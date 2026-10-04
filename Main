@@ -1,0 +1,104 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Extract project ZIP
+        shell: bash
+        run: |
+          set -e
+
+          ZIP="$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)"
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No project ZIP found in repository root."
+            exit 1
+          fi
+
+          rm -rf project
+          mkdir -p project
+
+          unzip -q "$ZIP" -d project
+
+          echo "Extracted project:"
+          find project -maxdepth 3 -type f | sort
+
+      - name: Locate Android project
+        shell: bash
+        run: |
+          set -e
+
+          SETTINGS="$(find project \( -name settings.gradle -o -name settings.gradle.kts \) -type f | head -n 1)"
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: settings.gradle or settings.gradle.kts was not found."
+            find project -maxdepth 5 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Android project found at:"
+          echo "$PROJECT_DIR"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Gradle version:"
+          gradle --version
+
+          echo "Building from:"
+          pwd
+
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for APK files..."
+
+          find "$PROJECT_DIR" -type f -name '*.apk' -print
+
+          if ! find "$PROJECT_DIR" -type f -name '*.apk' | grep -q .; then
+            echo "ERROR: APK was not produced."
+            exit 1
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradingViewScanner-APK
+          path: |
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/**/*.apk
+          if-no-files-found: error
