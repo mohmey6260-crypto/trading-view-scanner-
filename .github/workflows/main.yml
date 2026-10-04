@@ -7,21 +7,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Find and extract project ZIP
-        run: |
-          ZIP=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
-          if [ -z "$ZIP" ]; then
-            echo "No ZIP file found"
-            exit 1
-          fi
-          mkdir project
-          unzip -q "$ZIP" -d project
-          echo "Project extracted:"
-          find project -maxdepth 3 -type f | head -100
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -29,13 +21,38 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Extract project ZIP
+        run: |
+          ZIP=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No project ZIP found"
+            exit 1
+          fi
+
+          mkdir project
+          unzip -q "$ZIP" -d project
+
+          echo "Searching for Gradle project..."
+          find project -name gradlew -type f
 
       - name: Build APK
-        working-directory: project
         run: |
+          GRADLEW=$(find project -name gradlew -type f | head -n 1)
+
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: gradlew was not found"
+            echo "Project files:"
+            find project -maxdepth 4 -type f
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+
+          cd "$PROJECT_DIR"
+
           chmod +x gradlew
+
           ./gradlew assembleDebug
 
       - name: Upload APK
